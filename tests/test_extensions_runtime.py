@@ -188,18 +188,39 @@ class ExtensionRuntimeTestCase(unittest.TestCase):
             self.assertIsNotNone(task)
             self.assertEqual(task.status, TaskStatus.FAILED)
             self.assertEqual(task.error, "handler_error: Action handler failed.")
+            self.assertEqual(task.action_id, "test.async_bad")
+            self.assertEqual(task.run_id, accepted.run_id)
+            self.assertEqual(task.caller, "agent")
         finally:
             AnalysisTaskQueue._instance = original_instance
 
     def test_disabled_plugin_action_is_rejected(self):
         registry = ExtensionRegistry()
+        registry.register_plugin(
+            PluginDefinition(
+                "test",
+                "Test plugin",
+                "Test plugin",
+                status=PluginStatus.DISABLED,
+            )
+        )
+        self.assertEqual(registry.get_plugin("test").status, PluginStatus.DISABLED)
         registry.register_action(ActionDefinition("test.disabled", "test", "Disabled", _echo))
         result = ExtensionRuntime(registry=registry).execute_action("test.disabled")
 
-        self.assertEqual(PluginStatus.UNAVAILABLE.value, "unavailable")
         self.assertFalse(result.ok)
         self.assertEqual(result.error.code, "plugin_not_enabled")
         self.assertEqual(result.error.details["plugin_status"], "disabled")
+
+    def test_runtime_register_action_auto_enables_implicit_plugin(self):
+        runtime = ExtensionRuntime()
+        runtime.register_action(ActionDefinition("ext.echo", "ext", "Echo", _echo))
+
+        result = runtime.execute_action("ext.echo", {"symbol": "600519"}, {"caller": "agent"})
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.data["payload"]["symbol"], "600519")
 
     def test_invalid_context_and_required_input_fail_before_execution(self):
         invalid_context = self._runtime().execute_action(

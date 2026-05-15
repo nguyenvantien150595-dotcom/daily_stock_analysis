@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import Future
 import sys
 import types
 import unittest
@@ -25,7 +26,7 @@ if _orig_data_provider is None:
     pkg_mod.base = sys.modules["data_provider.base"]
     sys.modules["data_provider"] = pkg_mod
 
-from src.services.task_queue import AnalysisTaskQueue, get_task_queue, _dedupe_stock_code_key
+from src.services.task_queue import AnalysisTaskQueue, TaskStatus, get_task_queue, _dedupe_stock_code_key
 
 if _orig_data_provider_base is None:
     sys.modules.pop("data_provider.base", None)
@@ -124,15 +125,50 @@ class TaskQueueConfigSyncTestCase(unittest.TestCase):
             task_type="plugin",
             action_id="dsa.analyze_stock",
             subject="600519",
+            run_id="run_ext_1",
+            caller="agent",
         )
 
         payload = task.to_dict()
         self.assertEqual(task.task_type, "plugin")
         self.assertEqual(task.action_id, "dsa.analyze_stock")
         self.assertEqual(task.subject, "600519")
+        self.assertEqual(task.run_id, "run_ext_1")
+        self.assertEqual(task.caller, "agent")
         self.assertEqual(payload["task_type"], "plugin")
         self.assertEqual(payload["action_id"], "dsa.analyze_stock")
         self.assertEqual(payload["subject"], "600519")
+        self.assertEqual(payload["run_id"], "run_ext_1")
+        self.assertEqual(payload["caller"], "agent")
+
+    def test_submit_background_task_keeps_extension_metadata_in_pending_query(self) -> None:
+        queue = AnalysisTaskQueue(max_workers=1)
+        pending_task = Future()
+
+        class ExecutorStub:
+            def submit(self, func, *args):
+                return pending_task
+
+        queue._executor = ExecutorStub()
+
+        task = queue.submit_background_task(
+            lambda: {"ok": True},
+            stock_code="dsa.analyze_stock",
+            task_type="plugin",
+            action_id="dsa.analyze_stock",
+            subject="600519",
+            run_id="run_ext_pending",
+            caller="agent",
+        )
+
+        queried = queue.get_task(task.task_id)
+        pending = queue.list_pending_tasks()
+        self.assertIsNotNone(queried)
+        self.assertEqual(queried.status, TaskStatus.PENDING)
+        self.assertEqual(queried.run_id, "run_ext_pending")
+        self.assertEqual(queried.caller, "agent")
+        self.assertIn(task.task_id, {item.task_id for item in pending})
+        self.assertEqual(next(item.run_id for item in pending if item.task_id == task.task_id), "run_ext_pending")
 
 
 if __name__ == "__main__":

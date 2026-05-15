@@ -53,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [文档] 新增 Extension Runtime 架构文档，收敛 Plugin、Skill、Action、Contribution、Evidence Store 与 AlphaSift 后续接入边界。
 - [修复] Extension Runtime timeout guard 改为并发限时等待并立即返回 `timeout`，避免同步 handler 将调用线程阻塞；并明确该轮变更不涉及模型/provider/Base URL/配置迁移兼容风险。
 - [文档] 为 PR #1309 分解的 Extension Runtime MVP 明确补齐外部模型/API 兼容核验：本轮不引入新 provider/model/base URL 配置迁移逻辑，回退路径为版本回滚；兼容证据见 `docs/extensions.md` 的「兼容性与回退核验」章节及 `tests/test_extensions_runtime.py`、`tests/test_task_queue_config_sync.py`。
+- [文档] 明确本轮 Extension Runtime 注册与任务元数据桥接契约：`ExtensionRegistry.register_action` 对隐式 plugin 默认可执行化，`AnalysisTaskQueue.submit_background_task` 在队列内携带 `action_id/run_id/caller`；本次兼容核验复用既有 runtime/task_queue 单测链路，无新增模型/provider/Base URL 配置迁移。
 
 ## [3.16.0] - 2026-05-10
 

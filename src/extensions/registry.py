@@ -53,7 +53,14 @@ class ExtensionRegistry:
 
     def register_action(self, action: ActionDefinition) -> None:
         if action.plugin_id not in self._plugins:
-            self.register_plugin(PluginDefinition(action.plugin_id, action.plugin_id, "Implicit built-in plugin."))
+            self.register_plugin(
+                PluginDefinition(
+                    plugin_id=action.plugin_id,
+                    name=action.plugin_id,
+                    description="Implicit built-in plugin.",
+                    status=PluginStatus.ENABLED,
+                )
+            )
         self._actions[action.action_id] = action
 
     def register_actions(self, actions: Iterable[ActionDefinition]) -> None:

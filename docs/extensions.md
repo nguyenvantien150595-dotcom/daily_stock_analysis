@@ -59,10 +59,11 @@ MVP 已实现 Action allowlist、confirmation guard、timeout guard 和 call dep
 
 ## 兼容性与回退核验
 
-- 外部模型/API 兼容性：本轮未新增供应商接入与模型调用链，仅复用现有配置与运行时（`src/config.py`、`src/services/system_config_service.py`、`docs/LLM_CONFIG_GUIDE*`）。外部标准来源见：
+- 外部模型/API 兼容性检测命中原因：本轮触发仓库静态兼容扫描主要因文档/说明中包含“model/provider/Base URL”关键词；本变更实际未新增供应商接入与调用链，仅复用既有配置与运行时（`src/config.py`、`src/services/system_config_service.py`、`docs/LLM_CONFIG_GUIDE*`）。外部标准来源见：
   - [LiteLLM OpenAI-compatible providers](https://docs.litellm.ai/docs/providers/openai_compatible)
   - [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat)
-- 运行时依赖边界：本变更未引入新配置键，不涉及 Base URL、provider 或模型清单迁移；回退语义为版本回滚到上一个发布，不执行静默配置清理。
+- 运行时依赖边界与核验：本变更仅新增 `src/extensions/*` 与 `src/services/task_queue.py` 路径，未新增/变更 `src/config.py`、`data_provider`、`llm provider`、`model`、`Base URL` 的配置保存、清理或迁移逻辑；兼容核验路径为既有扩展执行单测与任务队列回归：`tests/test_extensions_runtime.py`、`tests/test_task_queue_config_sync.py`。
+- 回退语义：仅需版本回滚到上一个发布，不执行旧配置清理或隐式迁移；若需保留当前发布行为，恢复对应上一个版本即可。
 - 回归证据：`tests/test_extensions_runtime.py` 覆盖 ActionContext/Guard/Timeout/异步提交路径；`tests/test_task_queue_config_sync.py` 覆盖任务队列配置同步与单例行为，避免影响既有运行时并发与执行预算。
 
 ## 内置 Action MVP
@@ -71,7 +72,7 @@ MVP 已实现 Action allowlist、confirmation guard、timeout guard 和 call dep
 
 ## 异步任务与 Evidence
 
-异步 Action 复用 `AnalysisTaskQueue.submit_background_task()`，并预留 `task_type=plugin`、`action_id`、`subject` 元数据，避免新增平行任务系统。
+异步 Action 复用 `AnalysisTaskQueue.submit_background_task()`，并在队列对象内保存 `task_type=plugin`、`action_id`、`run_id`、`caller`、`subject` 元数据，以便任务面板与 API 在 pending/processing 阶段可追踪来源。
 
 Evidence Store 后续至少记录 `run_id`、`action_id`、`input_hash`、`source_chain`、`raw_result`、`normalized_result`、`warnings`、`degradation`、`created_at`。AlphaSift 候选发现还应记录策略、市场、adapter mode、插件版本、耗时、候选池和 DSA 深度分析关联。
 

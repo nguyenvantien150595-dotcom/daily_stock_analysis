@@ -33,6 +33,7 @@ class ActionTaskRunner:
             task_type="plugin",
             action_id=action.action_id,
             subject=subject,
+            run_id=run_id,
+            caller=context.caller,
         )
-        task.result = {"action_id": action.action_id, "run_id": run_id, "caller": context.caller}
         return task

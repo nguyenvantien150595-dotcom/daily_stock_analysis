@@ -22,11 +22,11 @@ For English contributors: please fill in English. All fields marked (EN) accept 
 请列出本 PR 修改的模块和文件范围。  
 *(EN) List the modules and files changed in this PR.*
 
-## Issue Link
+## Issue Link（如为 umbrella issue / 拆分问题请使用 Refs）
 
 必须填写以下之一 / Fill in one of:
-- `Fixes #<issue_number>` / 非 umbrella issue 或修复问题直达
-- `Refs #<issue_number>` / umbrella issue / 多个子任务拆分场景（推荐用于拆分到子 PR）
+- `Fixes #<issue_number>` / 非 umbrella issue 或修复问题直达（本 PR 全量修复该 issue）
+- `Refs #<issue_number>` / umbrella issue / 多个子任务拆分场景（本 PR 属于分阶段推进时使用）
 - 无 Issue 时说明原因与验收标准 / If no issue, explain the motivation and acceptance criteria
 
 ## Verification Commands And Results
