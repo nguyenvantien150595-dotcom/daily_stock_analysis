@@ -198,6 +198,27 @@ def test_downgrades_buy_when_capital_flow_values_are_na() -> None:
     assert "资金流数据缺失" in result.dashboard["decision_stability"]["capital_flow_status"]
 
 
+def test_downgrades_buy_advice_when_decision_type_is_hold_and_capital_flow_unavailable() -> None:
+    result = _result(
+        decision_type="hold",
+        operation_advice="建议买入",
+        score=68,
+        current_price=32.0,
+    )
+
+    stabilize_decision_with_structure(
+        result,
+        SimpleNamespace(support_levels=[30.0], resistance_levels=[34.0]),
+        _unsupported_fund_flow(),
+    )
+
+    assert result.decision_type == "hold"
+    assert result.operation_advice == "持有观察"
+    assert result.sentiment_score <= 59
+    assert result.dashboard["decision_stability"]["applied"] is True
+    assert "买入结论缺少资金面确认" in result.dashboard["decision_stability"]["reason"]
+
+
 def test_downgrades_buy_when_capital_flow_status_is_unavailable_case_insensitive() -> None:
     buy_result = _result(
         decision_type="buy",
