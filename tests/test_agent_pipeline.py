@@ -1688,6 +1688,48 @@ class TestAgentConstructionChain(unittest.TestCase):
         self.assertEqual(mock_completion.call_args.kwargs["temperature"], 0.6)
 
     @patch("src.agent.llm_adapter.Router")
+    def test_llm_adapter_omits_temperature_for_gpt5_family(self, _mock_router):
+        """Agent direct LiteLLM calls should omit temperature for strict default-temperature models."""
+        mock_cfg = SimpleNamespace(
+            agent_litellm_model="",
+            litellm_model="openai/gpt5.5-ferr",
+            litellm_fallback_models=[],
+            llm_model_list=[],
+            llm_temperature=0.2,
+            gemini_api_keys=[],
+            anthropic_api_keys=[],
+            openai_api_keys=[],
+            deepseek_api_keys=[],
+            openai_base_url=None,
+        )
+
+        from src.agent.llm_adapter import LLMToolAdapter
+        adapter = LLMToolAdapter(config=mock_cfg)
+        adapter._router = None
+        response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="agent ok",
+                        tool_calls=[],
+                    )
+                )
+            ],
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=2, total_tokens=3),
+        )
+
+        with patch("src.agent.llm_adapter.litellm.completion", return_value=response) as mock_completion:
+            result = adapter._call_litellm_model(
+                [{"role": "user", "content": "hi"}],
+                [],
+                "openai/gpt5.5-ferr",
+                temperature=0.2,
+            )
+
+        self.assertEqual(result.content, "agent ok")
+        self.assertNotIn("temperature", mock_completion.call_args.kwargs)
+
+    @patch("src.agent.llm_adapter.Router")
     def test_llm_adapter_fallback_does_not_leak_kimi_fixed_temperature(self, _mock_router):
         """Non-Kimi fallbacks should keep the requested temperature after a Kimi failure."""
         mock_cfg = SimpleNamespace(

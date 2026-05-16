@@ -30,9 +30,9 @@ from src.config import (
     get_api_keys_for_model,
     get_config,
     get_configured_llm_models,
-    normalize_litellm_temperature,
     resolve_news_window_days,
 )
+from src.llm.generation_params import apply_litellm_generation_params
 from src.storage import persist_llm_usage
 from src.data.stock_mapping import STOCK_NAME_MAP
 from src.report_language import (
@@ -2215,16 +2215,16 @@ class GeminiAnalyzer:
                         {"role": "system", "content": effective_system_prompt},
                         {"role": "user", "content": prompt},
                     ],
-                    "temperature": normalize_litellm_temperature(
-                        model,
-                        requested_temperature,
-                        model_list=config.llm_model_list,
-                        request_overrides={"extra_body": extra} if extra else None,
-                    ),
                     "max_tokens": max_tokens,
                 }
                 if extra:
                     call_kwargs["extra_body"] = extra
+                call_kwargs = apply_litellm_generation_params(
+                    call_kwargs,
+                    model,
+                    requested_temperature,
+                    model_list=config.llm_model_list,
+                )
 
                 _stream_text: Optional[str] = None
                 _stream_usage: Dict[str, Any] = {}

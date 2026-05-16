@@ -1481,6 +1481,28 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertEqual(self.manager.read_config_map()["LLM_TEMPERATURE"], "0.42")
 
     @patch("litellm.completion")
+    def test_test_llm_channel_omits_temperature_for_gpt5_family(self, mock_completion) -> None:
+        mock_completion.return_value = type(
+            "MockResponse",
+            (),
+            {
+                "choices": [type("Choice", (), {"message": type("Message", (), {"content": "OK"})()})()],
+            },
+        )()
+
+        payload = self.service.test_llm_channel(
+            name="primary",
+            protocol="openai",
+            base_url="https://api.example.com/v1",
+            api_key="sk-test-value",
+            models=["gpt5.5-ferr"],
+        )
+
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["resolved_model"], "openai/gpt5.5-ferr")
+        self.assertNotIn("temperature", mock_completion.call_args.kwargs)
+
+    @patch("litellm.completion")
     @patch("src.services.system_config_service.Config._load_from_env")
     def test_test_llm_channel_uses_runtime_temperature_for_non_kimi_models(
         self,

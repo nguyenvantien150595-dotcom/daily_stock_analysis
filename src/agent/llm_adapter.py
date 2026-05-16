@@ -23,8 +23,8 @@ from src.config import (
     get_configured_llm_models,
     get_effective_agent_models_to_try,
     get_effective_agent_primary_model,
-    normalize_litellm_temperature,
 )
+from src.llm.generation_params import apply_litellm_generation_params
 
 logger = logging.getLogger(__name__)
 
@@ -404,12 +404,6 @@ class LLMToolAdapter:
         call_kwargs: Dict[str, Any] = {
             "model": model,
             "messages": openai_messages,
-            "temperature": normalize_litellm_temperature(
-                model,
-                self._get_temperature() if temperature is None else temperature,
-                model_list=self._config.llm_model_list,
-                request_overrides={"extra_body": extra} if extra else None,
-            ),
         }
         if max_tokens is not None:
             call_kwargs["max_tokens"] = max_tokens
@@ -418,6 +412,12 @@ class LLMToolAdapter:
 
         if extra:
             call_kwargs["extra_body"] = extra
+        call_kwargs = apply_litellm_generation_params(
+            call_kwargs,
+            model,
+            self._get_temperature() if temperature is None else temperature,
+            model_list=self._config.llm_model_list,
+        )
 
         if tools:
             call_kwargs["tools"] = tools
