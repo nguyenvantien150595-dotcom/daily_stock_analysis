@@ -194,6 +194,85 @@ class TestAnalyzerGenerateText:
         assert len(passed_model_list) == 2
         assert all(item["litellm_params"].get("model") == "openai/gpt-4o-mini" for item in passed_model_list)
 
+    @patch("src.analyzer.Router")
+    def test_analyzer_legacy_router_recovery_cache_is_scoped_by_api_base(self, mock_router):
+        """Analyzer legacy recovery should not leak across same model different api_base."""
+        from src.analyzer import call_litellm_with_param_recovery as real_call
+        from src.llm.generation_params import clear_litellm_generation_param_recovery_cache
+
+        clear_litellm_generation_param_recovery_cache()
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="analyzer ok"))],
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=2, total_tokens=3),
+        )
+        strict_router = MagicMock()
+        flex_router = MagicMock()
+        strict_router.completion.side_effect = [
+            RuntimeError("Unsupported parameter: temperature is not supported"),
+            response,
+        ]
+        flex_router.completion.return_value = response
+        mock_router.side_effect = [strict_router, flex_router]
+
+        strict_cfg = SimpleNamespace(
+            litellm_model="openai/shared-model",
+            litellm_fallback_models=[],
+            llm_model_list=[],
+            llm_temperature=0.2,
+            gemini_api_keys=[],
+            anthropic_api_keys=[],
+            openai_api_keys=["sk-strict-key-1", "sk-strict-key-2"],
+            deepseek_api_keys=[],
+            openai_base_url="https://strict.example/v1",
+        )
+        flex_cfg = SimpleNamespace(
+            litellm_model="openai/shared-model",
+            litellm_fallback_models=[],
+            llm_model_list=[],
+            llm_temperature=0.2,
+            gemini_api_keys=[],
+            anthropic_api_keys=[],
+            openai_api_keys=["sk-flex-key-1", "sk-flex-key-2"],
+            deepseek_api_keys=[],
+            openai_base_url="https://flex.example/v1",
+        )
+
+        captured_model_lists = []
+
+        def _fake_recovery(call, **kwargs):
+            captured_model_lists.append(kwargs.get("model_list"))
+            return real_call(call, **kwargs)
+
+        import src.analyzer as analyzer_module
+        from src.analyzer import GeminiAnalyzer
+
+        with patch.object(analyzer_module, "call_litellm_with_param_recovery", side_effect=_fake_recovery):
+            GeminiAnalyzer(config=strict_cfg)._call_litellm(
+                "prompt",
+                {"max_tokens": 128, "temperature": 0.2},
+            )
+            GeminiAnalyzer(config=flex_cfg)._call_litellm(
+                "prompt",
+                {"max_tokens": 128, "temperature": 0.2},
+            )
+
+        assert len(captured_model_lists) == 2
+        strict_model_list = captured_model_lists[0]
+        flex_model_list = captured_model_lists[1]
+        assert strict_model_list is not None
+        assert flex_model_list is not None
+        assert all(
+            item.get("litellm_params", {}).get("api_base") == "https://strict.example/v1"
+            for item in strict_model_list
+        )
+        assert all(
+            item.get("litellm_params", {}).get("api_base") == "https://flex.example/v1"
+            for item in flex_model_list
+        )
+        assert strict_router.completion.call_args_list[0].kwargs["temperature"] == 0.2
+        assert "temperature" not in strict_router.completion.call_args_list[1].kwargs
+        assert flex_router.completion.call_args.kwargs["temperature"] == 0.2
+
     def test_call_litellm_stream_falls_back_to_non_stream_before_first_chunk(self):
         analyzer = self._make_analyzer()
         analyzer._config_override = SimpleNamespace(

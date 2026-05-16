@@ -1910,6 +1910,47 @@ class GeminiAnalyzer:
             e.get('model_name', '').startswith('__legacy_') for e in config.llm_model_list
         )
 
+    @staticmethod
+    def _legacy_router_provider_alias(model: str) -> str:
+        provider = model.split("/", 1)[0] if "/" in model else "openai"
+        return f"__legacy_{provider}"
+
+    @staticmethod
+    def _build_legacy_router_model_list_from_config(
+        model: str,
+        model_list: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Build legacy-router candidates from configured legacy llm_model_list entries."""
+        if not model:
+            return []
+        target_model = model
+        target_legacy_alias = GeminiAnalyzer._legacy_router_provider_alias(model)
+        legacy_entries: List[Dict[str, Any]] = []
+        for entry in model_list or []:
+            if not isinstance(entry, dict):
+                continue
+            model_name = str(entry.get("model_name") or "").strip()
+            if model_name != target_legacy_alias:
+                continue
+
+            params = entry.get("litellm_params")
+            if not isinstance(params, dict):
+                continue
+
+            api_key = str(params.get("api_key") or "").strip()
+            if not api_key or len(api_key) < 8:
+                continue
+
+            deployed_params = dict(params)
+            deployed_params["model"] = target_model
+            deployed_params["api_key"] = api_key
+            legacy_entries.append({
+                "model_name": target_model,
+                "litellm_params": deployed_params,
+            })
+
+        return legacy_entries
+
     def _init_litellm(self) -> None:
         """Initialize litellm Router from channels / YAML / legacy keys."""
         config = self._get_runtime_config()
@@ -1939,11 +1980,13 @@ class GeminiAnalyzer:
 
         # --- Legacy path: build Router for multi-key, or use single key ---
         keys = get_api_keys_for_model(litellm_model, config)
-
-        if len(keys) > 1:
-            # Build legacy Router for primary model multi-key load-balancing
+        legacy_model_list = self._build_legacy_router_model_list_from_config(
+            litellm_model,
+            config.llm_model_list,
+        )
+        if len(legacy_model_list) <= 1 and keys:
             extra_params = extra_litellm_params(litellm_model, config)
-            legacy_model_list = [
+            configured_model_list = [
                 {
                     "model_name": litellm_model,
                     "litellm_params": {
@@ -1954,6 +1997,12 @@ class GeminiAnalyzer:
                 }
                 for k in keys
             ]
+            if not legacy_model_list:
+                legacy_model_list = configured_model_list
+            elif len(legacy_model_list) < len(configured_model_list):
+                legacy_model_list = configured_model_list
+
+        if len(legacy_model_list) > 1:
             self._legacy_router_model_list = legacy_model_list
             self._router = Router(
                 model_list=legacy_model_list,
@@ -1961,10 +2010,12 @@ class GeminiAnalyzer:
                 num_retries=2,
             )
             logger.info(
-                f"Analyzer LLM: Legacy Router initialized with {len(keys)} keys "
+                f"Analyzer LLM: Legacy Router initialized with {len(legacy_model_list)} keys "
                 f"for {litellm_model}"
             )
-        elif keys:
+            return
+
+        if keys:
             logger.info(f"Analyzer LLM: litellm initialized (model={litellm_model})")
         else:
             logger.info(
