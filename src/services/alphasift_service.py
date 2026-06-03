@@ -572,7 +572,7 @@ def _call_alphasift_screen(screen: Any, strategy: str, market: str, max_results:
     if supports_context:
         kwargs["context"] = _build_alphasift_context(config)
 
-    with _alphasift_runtime_env(config):
+    with _alphasift_runtime_env(config), _alphasift_litellm_headers(config):
         try:
             return screen(strategy, **kwargs)
         except TypeError as exc:
@@ -682,7 +682,7 @@ def _build_alphasift_context(config: Config) -> Dict[str, Any]:
             "fallback_models": fallback_models,
             "temperature": config.llm_temperature,
             "channels": channels,
-            "model_list": _to_plain(config.llm_model_list or []),
+            "model_list": _build_alphasift_litellm_model_list(config, channels),
             "litellm_config_path": config.litellm_config_path or "",
         },
         "dsa": {
@@ -699,6 +699,132 @@ def _build_alphasift_context(config: Config) -> Dict[str, Any]:
             "search_stock_news": search_dsa_stock_news,
         },
     }
+
+
+@contextmanager
+def _alphasift_litellm_headers(config: Config) -> Iterator[None]:
+    header_routes = _build_alphasift_litellm_header_routes(config)
+    if not header_routes:
+        yield
+        return
+
+    try:
+        litellm_module = importlib.import_module("litellm")
+    except Exception:
+        yield
+        return
+
+    original_completion = getattr(litellm_module, "completion", None)
+    if not callable(original_completion):
+        yield
+        return
+
+    def completion_with_dsa_headers(*args: Any, **kwargs: Any) -> Any:
+        headers = _match_alphasift_litellm_headers(args, kwargs, header_routes)
+        if headers:
+            existing_headers = kwargs.get("extra_headers")
+            if isinstance(existing_headers, dict):
+                merged_headers = dict(headers)
+                merged_headers.update(existing_headers)
+                kwargs = dict(kwargs)
+                kwargs["extra_headers"] = merged_headers
+            elif existing_headers in (None, ""):
+                kwargs = dict(kwargs)
+                kwargs["extra_headers"] = dict(headers)
+        return original_completion(*args, **kwargs)
+
+    setattr(litellm_module, "completion", completion_with_dsa_headers)
+    try:
+        yield
+    finally:
+        if getattr(litellm_module, "completion", None) is completion_with_dsa_headers:
+            setattr(litellm_module, "completion", original_completion)
+
+
+def _build_alphasift_litellm_model_list(config: Config, channels: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    explicit_model_list = _to_plain(config.llm_model_list or [])
+    if isinstance(explicit_model_list, list) and explicit_model_list:
+        return explicit_model_list
+    return _channel_litellm_model_list(channels)
+
+
+def _channel_litellm_model_list(channels: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    model_list_builder = getattr(Config, "_channels_to_model_list", None)
+    if callable(model_list_builder):
+        return _to_plain(model_list_builder(channels))
+
+    model_list: List[Dict[str, Any]] = []
+    for channel in channels:
+        headers = dict(channel.get("extra_headers") or {})
+        base_url = _env_text(channel.get("base_url"))
+        for model_name in channel.get("models") or []:
+            for api_key in channel.get("api_keys") or []:
+                litellm_params: Dict[str, Any] = {"model": model_name}
+                if api_key:
+                    litellm_params["api_key"] = api_key
+                if base_url:
+                    litellm_params["api_base"] = base_url
+                if headers:
+                    litellm_params["extra_headers"] = dict(headers)
+                model_list.append({"model_name": model_name, "litellm_params": litellm_params})
+    return model_list
+
+
+def _build_alphasift_litellm_header_routes(config: Config) -> List[Dict[str, Any]]:
+    channels = _normalize_dsa_llm_channels(config)
+    model_list = _build_alphasift_litellm_model_list(config, channels)
+    routes: List[Dict[str, Any]] = []
+    for entry in model_list:
+        if not isinstance(entry, dict):
+            continue
+        params = entry.get("litellm_params") or {}
+        if not isinstance(params, dict):
+            continue
+        headers = params.get("extra_headers")
+        if not isinstance(headers, dict) or not headers:
+            continue
+        model_names = _dedupe_strings([
+            entry.get("model_name"),
+            params.get("model"),
+        ])
+        if not model_names:
+            continue
+        routes.append(
+            {
+                "models": model_names,
+                "api_key": _env_text(params.get("api_key")),
+                "api_base": _env_text(params.get("api_base") or params.get("base_url")),
+                "extra_headers": dict(headers),
+            }
+        )
+    return routes
+
+
+def _match_alphasift_litellm_headers(
+    args: Tuple[Any, ...],
+    kwargs: Dict[str, Any],
+    routes: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    model = _env_text(kwargs.get("model"))
+    if not model and args:
+        model = _env_text(args[0])
+    if not model:
+        return {}
+
+    api_key = _env_text(kwargs.get("api_key"))
+    api_base = _env_text(kwargs.get("api_base") or kwargs.get("base_url"))
+    for route in routes:
+        if model not in set(route.get("models") or []):
+            continue
+        route_api_key = _env_text(route.get("api_key"))
+        if route_api_key and api_key and route_api_key != api_key:
+            continue
+        route_api_base = _env_text(route.get("api_base"))
+        if route_api_base and api_base and route_api_base != api_base:
+            continue
+        headers = route.get("extra_headers")
+        return dict(headers) if isinstance(headers, dict) else {}
+    return {}
 
 
 def _resolve_alphasift_llm_models(config: Config) -> Tuple[str, List[str]]:

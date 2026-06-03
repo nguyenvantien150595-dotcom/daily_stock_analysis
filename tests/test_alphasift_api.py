@@ -661,8 +661,53 @@ class AlphaSiftOpportunitiesApiTestCase(unittest.TestCase):
         self.assertEqual(context["llm"]["model"], "gemini/gemini-2.5-flash")
         self.assertEqual(context["llm"]["channels"][0]["api_keys"], ["dsa-gemini-key"])
         self.assertEqual(context["llm"]["channels"][0]["extra_headers"], {"x-tenant": "dsa"})
+        self.assertEqual(context["llm"]["model_list"][0]["litellm_params"]["extra_headers"], {"x-tenant": "dsa"})
         self.assertIn("get_candidate_context", context["dsa"])
         self.assertEqual(payload["candidate_count"], 0)
+
+    def test_screen_injects_dsa_channel_headers_into_alphasift_litellm_calls(self) -> None:
+        config = Config(
+            alphasift_enabled=True,
+            alphasift_install_spec=DEFAULT_ALPHASIFT_TEST_SPEC,
+            litellm_model="gemini/gemini-2.5-flash",
+            llm_channels=[
+                {
+                    "name": "gemini",
+                    "protocol": "gemini",
+                    "enabled": True,
+                    "api_keys": ["dsa-gemini-key"],
+                    "models": ["gemini/gemini-2.5-flash"],
+                    "extra_headers": {"x-tenant": "dsa"},
+                }
+            ],
+        )
+        completion_calls: list[dict[str, object]] = []
+
+        def completion_impl(**kwargs):
+            completion_calls.append(kwargs)
+            return SimpleNamespace(choices=[])
+
+        fake_litellm = SimpleNamespace(completion=completion_impl)
+
+        def screen_impl(_strategy: str, **_kwargs):
+            fake_litellm.completion(
+                model="gemini/gemini-2.5-flash",
+                api_key="dsa-gemini-key",
+                messages=[{"role": "user", "content": "rank"}],
+            )
+            return {"candidates": []}
+
+        fake_module = _make_adapter_module(screen=MagicMock(side_effect=screen_impl))
+
+        with (
+            patch.dict(sys.modules, {"litellm": fake_litellm}, clear=False),
+            patch("src.services.alphasift_service._import_alphasift", return_value=fake_module),
+        ):
+            payload = self._screen(config, market="cn", strategy="dual_low", max_results=5)
+
+        self.assertEqual(payload["candidate_count"], 0)
+        self.assertEqual(completion_calls[0]["extra_headers"], {"x-tenant": "dsa"})
+        self.assertIs(fake_litellm.completion, completion_impl)
 
     def test_screen_preserves_explicit_alphasift_snapshot_source_priority(self) -> None:
         config = self._config(enabled=True)

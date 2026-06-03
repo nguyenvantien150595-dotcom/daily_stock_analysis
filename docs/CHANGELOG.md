@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [改进] 开启 AlphaSift 选股时先切换 `ALPHASIFT_ENABLED` 并检查内置适配层可用性，缺失时回滚开关并提示安装 requirements 或重建后端产物。
 - [改进] AlphaSift 已开启但适配层缺失时，策略列表和选股接口返回 `424 + diagnostics`，不再在业务请求中自动执行 `pip install`。
 - [修复] AlphaSift 嵌入 DSA 时复用 DSA 已解析的 LLM 模型、渠道和密钥配置，避免 Web 已配置 LLM 但选股 LLM 重排仍因缺少 provider key 降级。
+- [修复] AlphaSift 复用 DSA LLM 渠道时通过 LiteLLM model_list 和调用期 kwargs 传递额外请求头，避免 OpenAI 兼容代理缺少自定义 headers 后降级。
 - [修复] AlphaSift 选股复用 DSA LLM 路由时过滤未声明的托管 provider 备选模型，并把已声明渠道模型补入回退链，避免残留 Gemini fallback 覆盖可用的 DSA 渠道。
 - [改进] AlphaSift 选股页合并重复的快照源 fallback 提示，并保留 AlphaSift 自身的 Tushare 优先快照源逻辑。
 - [改进] AlphaSift 选股页在 LLM 重排降级时展示 warning/source error/parse error，并避免把本地因子评分误显示为 LLM 判断。
