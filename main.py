@@ -540,12 +540,18 @@ def run_full_analysis(
         if getattr(args, 'no_context_snapshot', False):
             save_context_snapshot = False
         query_id = uuid.uuid4().hex
+        explicit_market_review_planned = (
+            config.market_review_enabled
+            and not args.no_market_review
+            and effective_region != ''
+        )
         pipeline = StockAnalysisPipeline(
             config=config,
             max_workers=args.workers,
             query_id=query_id,
             query_source="cli",
-            save_context_snapshot=save_context_snapshot
+            save_context_snapshot=save_context_snapshot,
+            daily_market_context_allow_generate=not explicit_market_review_planned,
         )
 
         # 1. 运行个股分析

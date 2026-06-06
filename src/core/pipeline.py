@@ -112,6 +112,7 @@ class StockAnalysisPipeline:
         analysis_skills: Optional[List[str]] = None,
         analysis_phase: str = "auto",
         portfolio_context: Optional[Dict[str, Any]] = None,
+        daily_market_context_allow_generate: bool = True,
     ):
         """
         初始化调度器
@@ -133,6 +134,7 @@ class StockAnalysisPipeline:
         self.analysis_skills = list(analysis_skills) if analysis_skills is not None else None
         self.analysis_phase = analysis_phase or "auto"
         self.portfolio_context = dict(portfolio_context) if isinstance(portfolio_context, dict) else None
+        self.daily_market_context_allow_generate = daily_market_context_allow_generate
         
         # 初始化各模块
         self.db = get_db()
@@ -1329,7 +1331,7 @@ class StockAnalysisPipeline:
                 analyzer=self.analyzer,
                 search_service=self.search_service,
                 force_refresh=force_refresh,
-                allow_generate=True,
+                allow_generate=getattr(self, "daily_market_context_allow_generate", True),
                 target_date=target_date,
             )
         except Exception as exc:

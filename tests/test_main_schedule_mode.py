@@ -499,12 +499,14 @@ class MainScheduleModeTestCase(unittest.TestCase):
         pipeline = MagicMock()
         pipeline.run.return_value = []
         events = []
+        pipeline_kwargs = {}
 
         def refresh_index(config_arg):
             events.append("refresh")
 
         def build_pipeline(*args, **kwargs):
             events.append("pipeline")
+            pipeline_kwargs.update(kwargs)
             return pipeline
 
         lock_token = try_acquire_market_review_lock(config)
@@ -519,6 +521,7 @@ class MainScheduleModeTestCase(unittest.TestCase):
 
         refresh.assert_called_once_with(config)
         self.assertEqual(events[:2], ["refresh", "pipeline"])
+        self.assertFalse(pipeline_kwargs["daily_market_context_allow_generate"])
         pipeline.run.assert_called_once()
         run_market_review.assert_not_called()
 

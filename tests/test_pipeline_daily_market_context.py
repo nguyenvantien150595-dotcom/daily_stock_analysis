@@ -56,6 +56,29 @@ def test_pipeline_loads_daily_market_context_when_market_review_enabled() -> Non
     )
 
 
+def test_pipeline_can_load_daily_market_context_without_runtime_generation() -> None:
+    pipeline = StockAnalysisPipeline.__new__(StockAnalysisPipeline)
+    pipeline.config = SimpleNamespace(market_review_enabled=True, report_language="zh")
+    pipeline.db = MagicMock()
+    pipeline.notifier = MagicMock()
+    pipeline.analyzer = MagicMock()
+    pipeline.search_service = MagicMock()
+    pipeline.daily_market_context_allow_generate = False
+
+    with patch("src.core.pipeline.DailyMarketContextService") as service_cls:
+        service = service_cls.return_value
+        service.get_context.return_value = None
+
+        context = pipeline._load_daily_market_context(
+            "cn",
+            target_date=date(2026, 6, 6),
+        )
+
+    assert context is None
+    service.get_context.assert_called_once()
+    assert service.get_context.call_args.kwargs["allow_generate"] is False
+
+
 def test_pipeline_initializes_daily_market_context_service_once_across_threads() -> None:
     pipeline = StockAnalysisPipeline.__new__(StockAnalysisPipeline)
     pipeline.config = SimpleNamespace(market_review_enabled=True, report_language="zh")
