@@ -456,6 +456,43 @@ class AlphaSiftOpportunitiesApiTestCase(unittest.TestCase):
         self.assertEqual(payload["stocks"][0]["name"], "中际旭创")
         self.assertEqual(payload["route"][0]["title"], "fallback")
 
+    def test_hotspot_detail_uses_constituent_fallback_when_board_change_summary_fails(self) -> None:
+        import pandas as pd
+
+        config = self._config(enabled=True)
+
+        class FakeProvider(alphasift_service.DsaEastMoneyHotspotProvider):
+            def _find_board_change(self, topic: str) -> Dict[str, Any]:
+                raise TimeoutError("board change timeout")
+
+            def _fetch_ths_constituents(self, topic: str) -> Any:
+                return pd.DataFrame()
+
+            def _fetch_eastmoney_constituents(self, topic: str, *, source: str) -> Any:
+                return pd.DataFrame([{
+                    "代码": "002138",
+                    "名称": "顺络电子",
+                    "涨跌幅": 3.2,
+                }])
+
+            def _fetch_ths_summary_event(self, topic: str) -> str:
+                return "需求升温"
+
+            def _fetch_ths_info(self, topic: str) -> Dict[str, str]:
+                return {}
+
+        with (
+            patch("src.services.alphasift_service._get_alphasift_status_snapshot", return_value=({}, True, {})),
+            patch("src.services.alphasift_service._resolve_hotspot_provider", return_value=("akshare", FakeProvider())),
+        ):
+            payload = self._hotspot_detail(config=config, provider="akshare", topic="MLCC")
+
+        self.assertEqual(payload["enabled"], True)
+        self.assertEqual(payload["topic"], "MLCC")
+        self.assertEqual(payload["summary"], "MLCC 当前暂无可用的板块异动摘要。")
+        self.assertEqual(payload["route"][0]["source"], "ths_summary")
+        self.assertEqual(payload["stocks"][0]["name"], "顺络电子")
+
     def test_strategies_rejects_when_enabled_but_adapter_missing(self) -> None:
         config = self._config(enabled=True)
 

@@ -1090,7 +1090,15 @@ class DsaEastMoneyHotspotProvider:
         return self._fallback_constituents(symbol)
 
     def hotspot_detail(self, topic: str) -> Dict[str, Any]:
-        summary = self._find_board_change(topic)
+        try:
+            summary = self._find_board_change(topic)
+        except Exception as exc:
+            logger.warning(
+                "AlphaSift board-change summary fetch failed for %s; continuing without summary: %s",
+                topic,
+                exc,
+            )
+            summary = {}
         stocks = self._normalize_constituent_records(self.stock_board_concept_cons_em(topic))
         route = self._build_hotspot_route(topic, summary)
         info = self._fetch_ths_info(topic)
@@ -1369,7 +1377,15 @@ class DsaEastMoneyHotspotProvider:
     def _fallback_constituents(self, topic: str) -> Any:
         import pandas as pd
 
-        summary = self._find_board_change(topic)
+        try:
+            summary = self._find_board_change(topic)
+        except Exception as exc:
+            logger.warning(
+                "AlphaSift board-change constituent fallback failed for %s; trying other sources: %s",
+                topic,
+                exc,
+            )
+            return pd.DataFrame()
         code = _env_text(summary.get("板块异动最频繁个股及所属类型-股票代码"))
         name = _env_text(summary.get("板块异动最频繁个股及所属类型-股票名称"))
         if not code and not name:
