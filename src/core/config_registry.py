@@ -2665,7 +2665,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "is_editable": True,
         "default_value": "",
         "options": [],
-        "validation": {"pattern": r"^\s*(?:([01]\d|2[0-3]):[0-5]\d\s*)(?:,\s*([01]\d|2[0-3]):[0-5]\d\s*)*$"},
+        "validation": {"pattern": r"^\s*(?:(?:[01]\d|2[0-3]):[0-5]\d\s*(?:,\s*(?:[01]\d|2[0-3]):[0-5]\d\s*)*)?$"},
         "display_order": 11,
         "help_key": "settings.system.schedule",
         "examples": [

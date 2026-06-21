@@ -795,6 +795,11 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertFalse(validation["valid"])
         self.assertTrue(any(issue["code"] == "invalid_format" for issue in validation["issues"]))
 
+    def test_validate_accepts_empty_schedule_times_fallback(self) -> None:
+        validation = self.service.validate(items=[{"key": "SCHEDULE_TIMES", "value": ""}])
+        self.assertTrue(validation["valid"])
+        self.assertEqual(validation["issues"], [])
+
     def test_validate_reports_invalid_searxng_url(self) -> None:
         validation = self.service.validate(items=[{"key": "SEARXNG_BASE_URLS", "value": "searx.local,https://ok.example"}])
         self.assertFalse(validation["valid"])
