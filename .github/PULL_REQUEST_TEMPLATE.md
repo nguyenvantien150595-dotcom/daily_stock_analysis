@@ -64,7 +64,9 @@ python -m pytest -m "not network"
 
 关键输出/结论 / Key output & conclusion:
 
-- 【兼容示例】若 PR 文档仍保留“历史失败”字样，请在同一段明确补充“当前 CI 已通过”；若当前 CI 通过，请直接写“当前 CI 全通过（含 backend-gate:pass）”避免误导 reviewer。
+- 【兼容示例】若 PR 文档仍保留“历史失败”字样，请在同一段明确补充“当前 CI 已通过”；若当前 CI 通过，请直接写“当前 CI 全通过（含 ai-governance/backend-gate/web-gate/docker-build 全部 pass）”避免误导 reviewer。
+
+- 建议在 PR 描述内按实际结果追加一行：`当前 Head CI：ai-governance:pass / backend-gate:pass / docker-build:pass / web-gate:pass`（仅示例，按实际结果替换）。
 
 > 若上述核验项与 PR 文本冲突，建议先更新 PR 描述再提交，避免审查因状态不一致被阻塞。
 
@@ -79,6 +81,11 @@ python -m pytest -m "not network"
 >
 > - Playwright 截图产物：`apps/dsa-web/e2e/smoke.spec.ts`（`npx playwright test apps/dsa-web/e2e/smoke.spec.ts --grep "backtest page renders filter controls after login"`）
 > - 审查证据链接：可直接使用 Actions 产物、GitHub 评论附件或外部可访问链接。
+
+> 替代证据模板（设置页变更建议）：
+> - 命令：`cd apps/dsa-web && npx playwright test e2e/smoke.spec.ts --grep "settings page"`
+> - 产物路径：`apps/dsa-web/test-results/**/smoke-settings-page-*.png`
+> - 说明：截图中应可见 `MARKET_REVIEW_REGION` 的选项文案（A 股/港股/美股/日股/韩股/全部市场）
 
 - 截图链接 / Screenshot links（Web UI/报告改动项必填）：
 - 前后对比 / Before & After（如有）：
