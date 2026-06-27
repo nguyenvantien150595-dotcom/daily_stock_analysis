@@ -2537,6 +2537,36 @@ Sector text.
         assert snapshot["dimensions"]["index"]["available"] is True
         assert snapshot["dimensions"]["limit"] == {"score": 50, "available": False}
 
+    @pytest.mark.parametrize(
+        ("region", "profile_name", "index_code", "index_name"),
+        [
+            ("jp", "JP_PROFILE", "N225", "Nikkei 225"),
+            ("kr", "KR_PROFILE", "KS11", "KOSPI"),
+        ],
+    )
+    def test_market_light_snapshot_accepts_jp_kr_regions(
+        self, region, profile_name, index_code, index_name
+    ):
+        import src.core.market_profile as market_profile
+        from src.market_analyzer import MarketIndex, MarketOverview
+
+        ma = self._make_market_analyzer_with_mock_generate_text(return_value="review")
+        ma.region = region
+        ma.profile = getattr(market_profile, profile_name)
+        overview = MarketOverview(
+            date="2026-03-06",
+            indices=[MarketIndex(code=index_code, name=index_name, current=30000, change_pct=0.5)],
+        )
+
+        snapshot = ma.build_market_light_snapshot(overview)
+
+        assert snapshot["region"] == region
+        assert snapshot["trade_date"] == "2026-03-06"
+        assert snapshot["data_quality"] == "partial"
+        assert snapshot["dimensions"]["breadth"] == {"score": 50, "available": False}
+        assert snapshot["dimensions"]["index"]["available"] is True
+        assert snapshot["dimensions"]["limit"] == {"score": 50, "available": False}
+
     def test_market_review_payload_omits_breadth_for_markets_without_stats(self):
         from src.core.market_profile import US_PROFILE
         from src.market_analyzer import MarketIndex, MarketOverview
