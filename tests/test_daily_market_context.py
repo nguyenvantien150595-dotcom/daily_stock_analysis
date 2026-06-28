@@ -168,6 +168,35 @@ def test_reuses_jp_market_review_history_without_normalizing_to_cn() -> None:
     run_review.assert_not_called()
 
 
+def test_jp_kr_request_does_not_reuse_legacy_both_history() -> None:
+    db = MagicMock()
+    db.get_analysis_history.return_value = [
+        _history_record(
+            created_at=datetime(2026, 6, 6, 9, 30),
+            region="both",
+            summary="旧三市场复盘，高风险，建议观望，仓位上限30%。",
+        )
+    ]
+    service = DailyMarketContextService(
+        db_manager=db,
+        today_fn=lambda: date(2026, 6, 6),
+    )
+
+    for region in ("jp", "kr"):
+        with patch("src.services.daily_market_context.run_market_review") as run_review:
+            context = service.get_context(
+                region=region,
+                config=SimpleNamespace(report_language="zh"),
+                notifier=MagicMock(),
+                analyzer=MagicMock(),
+                search_service=MagicMock(),
+                allow_generate=False,
+            )
+
+        assert context is None
+        run_review.assert_not_called()
+
+
 def test_multi_market_region_does_not_fallback_to_cn_history() -> None:
     db = MagicMock()
     db.get_analysis_history.return_value = [
