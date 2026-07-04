@@ -143,7 +143,8 @@ const getCandidateReason = (item: AlphaSiftCandidate) => {
 };
 
 const getSignal = (item: AlphaSiftCandidate) => {
-  const rawSignal = item.raw.action ?? item.raw.signal ?? item.raw.recommendation;
+  // raw may be absent on results restored from the persisted snapshot.
+  const rawSignal = item.raw?.action ?? item.raw?.signal ?? item.raw?.recommendation;
   return typeof rawSignal === 'string' && rawSignal.trim() ? rawSignal : '观察';
 };
 
@@ -457,6 +458,9 @@ const StockScreeningPage: React.FC = () => {
   const [hotspotError, setHotspotError] = useState('');
   const [screenMeta, setScreenMeta] = useState<AlphaSiftScreenResponse | null>(null);
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
+  // Non-null when the visible candidates were restored from the server-side
+  // last-result snapshot instead of a run in this session (value = saved_at).
+  const [restoredFrom, setRestoredFrom] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(restoredTask?.taskId));
   const [enabling, setEnabling] = useState(false);
   const [loadingStrategies, setLoadingStrategies] = useState(false);
@@ -491,7 +495,43 @@ const StockScreeningPage: React.FC = () => {
     setCandidates([]);
     setScreenMeta(null);
     setExpandedCode(null);
+    setRestoredFrom(null);
   };
+
+  // Restore the last persisted screen result on mount so switching modules or
+  // reopening the page does not lose the previous run (results themselves live
+  // server-side in data/alphasift/last_screen.json).
+  useEffect(() => {
+    if (restoredTask?.taskId) {
+      return undefined; // An in-flight task takes precedence; polling will fill results.
+    }
+    let active = true;
+    void alphasiftApi
+      .getLastScreen()
+      .then((last) => {
+        if (!active || !last.available || !last.result) {
+          return;
+        }
+        applyScreenResult(last.result);
+        setRestoredFrom(last.savedAt || '');
+        if (last.strategy) {
+          setStrategy(last.strategy);
+        }
+        if (last.market) {
+          setMarket(last.market);
+        }
+        if (Number.isFinite(Number(last.maxResults)) && Number(last.maxResults) > 0) {
+          setMaxResults(Math.min(100, Math.max(1, Number(last.maxResults))));
+        }
+      })
+      .catch(() => {
+        // Restoring is best-effort; a fresh run still works without it.
+      });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadHotspotDetail = useCallback(async (topic: string, options: { refresh?: boolean } = {}) => {
     if (!topic) {
@@ -693,6 +733,7 @@ const StockScreeningPage: React.FC = () => {
       if (task.status === 'completed') {
         if (task.result) {
           applyScreenResult(task.result);
+          setRestoredFrom(null); // Fresh run in this session, not a restored snapshot.
           setError('');
         } else {
           setError('选股任务已完成，但服务端未返回候选结果。');
@@ -736,9 +777,30 @@ const StockScreeningPage: React.FC = () => {
         const parsedError = getParsedApiError(err);
         setError(formatParsedApiError(parsedError) || '暂时无法获取选股任务状态，稍后将自动重试。');
         if (isUnrecoverableScreenTaskError(parsedError)) {
-          setCandidates([]);
-          setScreenMeta(null);
           finishTask();
+          // The queued task is gone (expired/restarted); fall back to the last
+          // persisted result instead of leaving the page empty.
+          void alphasiftApi
+            .getLastScreen()
+            .then((last) => {
+              if (!active) {
+                return;
+              }
+              if (last.available && last.result) {
+                applyScreenResult(last.result);
+                setRestoredFrom(last.savedAt || '');
+                setError('选股任务已过期，已恢复最近一次保存的选股结果。');
+              } else {
+                setCandidates([]);
+                setScreenMeta(null);
+              }
+            })
+            .catch(() => {
+              if (active) {
+                setCandidates([]);
+                setScreenMeta(null);
+              }
+            });
           return;
         }
         setLoading(true);
@@ -804,6 +866,7 @@ const StockScreeningPage: React.FC = () => {
     setLoading(true);
     setError('');
     setScreenMeta(null);
+    setRestoredFrom(null);
     setTaskProgress(0);
     setTaskMessage('正在提交选股任务...');
     try {
@@ -1284,13 +1347,22 @@ const StockScreeningPage: React.FC = () => {
           </div>
         </div>
 
+        {restoredFrom !== null && candidates.length > 0 ? (
+          <InlineAlert
+            variant="info"
+            title="已恢复上次选股结果"
+            message={`保存于 ${restoredFrom ? new Date(restoredFrom).toLocaleString('zh-CN') : '较早前'}，点击“运行选股”可获取最新候选。`}
+            className="mb-4"
+          />
+        ) : null}
+
         {candidates.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border bg-surface/70 px-5 py-10 text-center">
             <p className="text-sm font-medium text-foreground">暂无结果</p>
             <p className="mt-2 text-sm text-secondary-text">开启 AlphaSift 后点击“运行选股”生成候选列表。</p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-border">
+          <div className="overflow-x-auto rounded-xl border border-border">
             <table className="w-full min-w-[860px] border-collapse text-sm">
               <thead className="bg-surface text-left text-xs text-secondary-text">
                 <tr>

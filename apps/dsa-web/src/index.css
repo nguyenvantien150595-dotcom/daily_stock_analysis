@@ -1176,8 +1176,17 @@ textarea {
   );
 }
 
+/* position lives in @layer components so Tailwind position utilities
+   (absolute/fixed on mobile drawers) can override it; unlayered rules would
+   always beat layered utilities and break drawer height/scrolling. */
+@layer components {
+  .glass-card,
+  .dashboard-card {
+    position: relative;
+  }
+}
+
 .glass-card {
-  position: relative;
   overflow: hidden;
   border-radius: 1rem;
   border: 1px solid var(--border-subtle);
@@ -1237,7 +1246,7 @@ textarea {
 }
 
 .dashboard-card {
-  position: relative;
+  /* position: relative comes from the @layer components rule above .glass-card */
   overflow: hidden;
   border-radius: 1rem;
   border: 1px solid var(--border-subtle);
@@ -1468,6 +1477,25 @@ textarea {
   z-index: 10;
   display: flex;
   gap: 0.5rem;
+}
+
+/* On touch screens the action buttons are always visible (the hover-hide rule
+   below only targets fine-pointer devices). Rather than reserve a wide right
+   gutter or overlap the first line, lay them out as a compact right-aligned
+   row above the message so the answer text can use the full bubble width. */
+@media (max-width: 640px) {
+  .chat-message-actions {
+    position: static;
+    justify-content: flex-end;
+    gap: 0.25rem;
+    margin-bottom: 0.375rem;
+  }
+
+  .chat-copy-btn {
+    height: 1.4rem;
+    padding: 0.25rem 0.4rem;
+    font-size: 0.72rem;
+  }
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -2295,6 +2323,31 @@ textarea {
   border: 1px solid var(--chat-avatar-ai-border);
 }
 
+/* Full-height workspace shells (chat, home dashboard): use the dynamic
+   viewport unit so bottom content is not pushed under the mobile browser's
+   address bar. The plain 100vh line is a fallback for browsers without dvh. */
+.chat-workspace-shell,
+.page-workspace-shell {
+  height: calc(100vh - 5rem);
+  height: calc(100dvh - 5rem);
+}
+
+@media (min-width: 640px) {
+  .chat-workspace-shell,
+  .page-workspace-shell {
+    height: calc(100vh - 5.5rem);
+    height: calc(100dvh - 5.5rem);
+  }
+}
+
+@media (min-width: 1024px) {
+  .chat-workspace-shell,
+  .page-workspace-shell {
+    height: calc(100vh - 2rem);
+    height: calc(100dvh - 2rem);
+  }
+}
+
 .chat-bubble-user {
   background-color: var(--chat-bubble-user-bg);
   color: hsl(var(--foreground) / 0.88);
@@ -2326,6 +2379,10 @@ textarea {
   color: var(--chat-prose-fg);
   font-size: 0.875rem;
   line-height: 1.6;
+  /* Prevent long unbreakable tokens (URLs, codes) from forcing the bubble wider
+     than the mobile viewport and getting clipped by the bubble's overflow-hidden. */
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .chat-prose h1,
@@ -2389,6 +2446,16 @@ textarea {
   border: 1px solid var(--chat-prose-border);
   border-radius: 0.5rem;
   padding: 0.75rem;
+}
+
+/* Wide Markdown tables (决策仪表盘 / 买卖点位等) must scroll horizontally instead
+   of being clipped by the message bubble's overflow-hidden on narrow screens. */
+.chat-prose table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  -webkit-overflow-scrolling: touch;
 }
 
 .chat-prose th,

@@ -236,6 +236,15 @@ export type AlphaSiftScreenTaskStatus = {
   result?: AlphaSiftScreenResponse | null;
 };
 
+export type AlphaSiftLastScreenResponse = {
+  available: boolean;
+  savedAt?: string;
+  strategy?: string;
+  market?: string;
+  maxResults?: number;
+  result?: AlphaSiftScreenResponse | null;
+};
+
 export function notifyAlphaSiftConfigChanged(): void {
   window.dispatchEvent(new Event(ALPHASIFT_CONFIG_CHANGED_EVENT));
   notifySystemConfigChanged();
@@ -283,6 +292,11 @@ export const alphasiftApi = {
   async getScreenTask(taskId: string): Promise<AlphaSiftScreenTaskStatus> {
     const response = await apiClient.get<Record<string, unknown>>(`/api/v1/alphasift/screen/tasks/${encodeURIComponent(taskId)}`);
     return toCamelCase<AlphaSiftScreenTaskStatus>(response.data);
+  },
+
+  async getLastScreen(): Promise<AlphaSiftLastScreenResponse> {
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/alphasift/screen/last');
+    return toCamelCase<AlphaSiftLastScreenResponse>(response.data);
   },
 
   async getStrategies(): Promise<AlphaSiftStrategiesResponse> {

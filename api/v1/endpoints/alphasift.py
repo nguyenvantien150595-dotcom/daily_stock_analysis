@@ -3,7 +3,11 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import uuid
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -12,9 +16,11 @@ from pydantic import BaseModel, Field
 from api.deps import get_config_dep
 from api.v1.errors import api_error
 from src.config import Config
-from src.services.alphasift_service import AlphaSiftService
+from src.services.alphasift_service import AlphaSiftService, _resolve_alphasift_data_dir
 from src.services.task_queue import TaskStatus as QueueTaskStatus
 from src.services.task_queue import get_task_queue
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -67,6 +73,38 @@ def _screening_task_not_found(task_id: str) -> HTTPException:
         "alphasift_screen_task_not_found",
         f"选股任务 {task_id} 不存在或已过期",
     )
+
+
+def _last_screen_path() -> Path:
+    return _resolve_alphasift_data_dir() / "last_screen.json"
+
+
+def _save_last_screen_result(
+    result: Dict[str, Any],
+    *,
+    strategy: str,
+    market: str,
+    max_results: int,
+) -> None:
+    """Persist the latest completed screen result to disk (best-effort).
+
+    Lets the frontend restore results after route switches, page reloads or
+    backend restarts; in-memory task queue entries expire and cannot serve
+    that purpose. Failures are logged and never break the screening flow.
+    """
+    try:
+        path = _last_screen_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "saved_at": datetime.now().isoformat(timespec="seconds"),
+            "strategy": strategy,
+            "market": market,
+            "max_results": max_results,
+            "result": result,
+        }
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001 - persistence must never break screening
+        logger.warning("保存最近选股结果失败: %s", exc)
 
 
 @router.get("/status")
@@ -143,6 +181,12 @@ def alphasift_start_screen_task(
             market=request.market,
             max_results=request.max_results,
         )
+        _save_last_screen_result(
+            result,
+            strategy=request.strategy,
+            market=request.market,
+            max_results=request.max_results,
+        )
         task_queue.update_task_progress(
             task_id,
             90,
@@ -188,14 +232,37 @@ def alphasift_screen_task_status(task_id: str) -> AlphaSiftScreenTaskStatus:
     )
 
 
+@router.get("/screen/last")
+def alphasift_last_screen() -> Dict[str, Any]:
+    """Return the most recently persisted screen result, if any."""
+    try:
+        path = _last_screen_path()
+        if not path.exists():
+            return {"available": False}
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or not isinstance(data.get("result"), dict):
+            return {"available": False}
+        return {"available": True, **data}
+    except Exception as exc:  # noqa: BLE001 - a corrupt cache must not 500 the page
+        logger.warning("读取最近选股结果失败: %s", exc)
+        return {"available": False}
+
+
 @router.post("/screen")
 def alphasift_screen(
     request: AlphaSiftScreenRequest,
     http_request: Request,
     config: Config = Depends(get_config_dep),
 ) -> Dict[str, Any]:
-    return _service(config).screen(
+    result = _service(config).screen(
         strategy=request.strategy,
         market=request.market,
         max_results=request.max_results,
     )
+    _save_last_screen_result(
+        result,
+        strategy=request.strategy,
+        market=request.market,
+        max_results=request.max_results,
+    )
+    return result

@@ -13,6 +13,7 @@ A股自选股智能分析系统 - AI分析层
 import json
 import logging
 import math
+import os
 import re
 import time
 from dataclasses import dataclass
@@ -99,6 +100,25 @@ from src.services.daily_market_context import format_daily_market_context_prompt
 from src.market_phase_prompt import format_market_phase_prompt_section
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_LLM_TIMEOUT_SECONDS = 180.0
+
+
+def _llm_request_timeout_seconds() -> float:
+    """LLM 请求级超时（秒），可用 LLM_TIMEOUT_SEC 环境变量覆盖。
+
+    防止 litellm 默认长超时在服务端半关闭连接时挂起分析流水线；
+    默认 180s 以兼容 deepseek-reasoner 等慢速长文生成。
+    """
+    raw = os.getenv("LLM_TIMEOUT_SEC", "").strip()
+    if not raw:
+        return _DEFAULT_LLM_TIMEOUT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning("LLM_TIMEOUT_SEC=%r 不是有效数字，使用默认 %.0fs", raw, _DEFAULT_LLM_TIMEOUT_SECONDS)
+        return _DEFAULT_LLM_TIMEOUT_SECONDS
+    return value if value > 0 else _DEFAULT_LLM_TIMEOUT_SECONDS
 
 
 def _normalize_risk_warning_values(value: Any) -> List[str]:
@@ -2605,6 +2625,11 @@ class GeminiAnalyzer:
         router_model_names: set[str],
     ) -> Any:
         """Dispatch a LiteLLM completion through router or direct fallback."""
+        # 兜底请求超时：litellm/Router 默认超时过长（600s+），遇到服务端半关闭
+        # 连接（CloseWait）会长时间挂起整个分析流水线。上游显式传入 timeout 时优先。
+        if not call_kwargs.get("timeout"):
+            call_kwargs = dict(call_kwargs)
+            call_kwargs["timeout"] = _llm_request_timeout_seconds()
         origins = route_deployment_origins(config.llm_model_list, model)
         if origins.is_mixed:
             raise RuntimeError("Hermes/non-Hermes mixed generation route is not supported without deployment-level no-proxy client support")

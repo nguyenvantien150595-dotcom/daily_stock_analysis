@@ -869,7 +869,7 @@ const ChatPage: React.FC = () => {
   return (
     <div
       data-testid="chat-workspace"
-      className="flex h-[calc(100vh-5rem)] w-full min-w-0 gap-4 overflow-hidden sm:h-[calc(100vh-5.5rem)] lg:h-[calc(100vh-2rem)]"
+      className="chat-workspace-shell flex w-full min-w-0 gap-4 overflow-hidden"
     >
       {/* Desktop sidebar */}
       <div className="hidden h-full w-64 flex-shrink-0 flex-col overflow-hidden rounded-[1.25rem] border border-white/8 bg-card/82 shadow-soft-card md:flex">
@@ -1057,7 +1057,7 @@ const ChatPage: React.FC = () => {
             className="relative z-10 flex-1"
             viewportRef={messagesViewportRef}
             onScroll={handleMessagesScroll}
-            viewportClassName="space-y-6 p-4 md:p-6"
+            viewportClassName="space-y-5 px-2 py-4 md:space-y-6 md:p-6"
             testId="chat-message-scroll"
           >
             {messages.length === 0 && !loading ? (
@@ -1102,11 +1102,11 @@ const ChatPage: React.FC = () => {
                 return (
                 <div
                   key={msg.id}
-                  className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
+                  className={`flex gap-2 md:gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
                 >
                   <div
                     className={cn(
-                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold shadow-sm transition-all',
+                      'hidden h-7 w-7 md:flex md:h-8 md:w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold shadow-sm transition-all',
                       msg.role === 'user' ? 'chat-avatar-user' : 'chat-avatar-ai'
                     )}
                   >
@@ -1114,7 +1114,7 @@ const ChatPage: React.FC = () => {
                   </div>
                   <div
                     className={cn(
-                      'group/message min-w-0 w-fit max-w-[min(100%,48rem)] overflow-hidden px-5 py-3.5 transition-colors',
+                      'group/message min-w-0 w-fit max-w-[min(100%,48rem)] overflow-hidden px-3 py-2.5 md:px-5 md:py-3.5 transition-colors',
                       msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'
                     )}
                   >
@@ -1163,7 +1163,7 @@ const ChatPage: React.FC = () => {
                             导出
                           </button>
                         </div>
-                        <div className="chat-prose pr-20 sm:pr-24">
+                        <div className="chat-prose sm:pr-24">
                           <Markdown remarkPlugins={[remarkGfm]}>
                             {msg.content}
                           </Markdown>
@@ -1188,11 +1188,11 @@ const ChatPage: React.FC = () => {
             )}
 
             {loading && (
-              <div className="flex gap-4">
-                <div className="w-8 h-8 rounded-full bg-elevated text-foreground flex items-center justify-center flex-shrink-0 text-xs font-bold">
+              <div className="flex gap-2 md:gap-4">
+                <div className="hidden w-7 h-7 md:w-8 md:h-8 rounded-full bg-elevated text-foreground md:flex items-center justify-center flex-shrink-0 text-xs font-bold">
                   AI
                 </div>
-                <div className="min-w-[200px] max-w-[min(100%,48rem)] overflow-hidden rounded-2xl rounded-tl-sm border border-white/6 bg-card/72 px-5 py-4">
+                <div className="min-w-[180px] max-w-[min(100%,48rem)] overflow-hidden rounded-2xl rounded-tl-sm border border-white/6 bg-card/72 px-3 py-3 md:px-5 md:py-4">
                   <div className="flex items-center gap-2.5 text-sm text-secondary-text">
                     <div className="relative w-4 h-4 flex-shrink-0">
                       <div className="absolute inset-0 rounded-full border-2 border-cyan/20" />
@@ -1367,6 +1367,17 @@ const ChatPage: React.FC = () => {
                         </label>
                       );
                     })}
+                    {/* Touch screens have no hover: show selected skills' descriptions inline. */}
+                    <div className="w-full space-y-1 md:hidden">
+                      {skills
+                        .filter((s) => selectedSkillIdSet.has(s.id) && s.description)
+                        .map((s) => (
+                          <p key={s.id} className="text-xs leading-5 text-muted-text">
+                            <span className="font-medium text-secondary-text">{s.name}：</span>
+                            {s.description}
+                          </p>
+                        ))}
+                    </div>
                   </div>
                 </div>
               )}

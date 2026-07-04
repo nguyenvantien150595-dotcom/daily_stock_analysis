@@ -23,9 +23,17 @@ A股自选股智能分析系统 - 主调度程序
 """
 from __future__ import annotations
 
+import os
+import sys
+
+# 无控制台运行（pythonw / 计划任务）时 sys.stderr 为 None，akshare 内部的 tqdm
+# 进度条会在持有全局锁时写入失败，导致所有数据抓取线程死锁（进度条锁永不释放）。
+# 必须在 tqdm 被任何模块导入之前设置：TQDM_DISABLE 在装饰时读取，.env 加载太晚。
+if sys.stderr is None or sys.stdout is None:
+    os.environ.setdefault("TQDM_DISABLE", "1")
+
 import json
 import multiprocessing
-import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 

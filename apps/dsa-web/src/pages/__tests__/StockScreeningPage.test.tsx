@@ -7,6 +7,7 @@ const {
   getAlphaSiftStatus,
   getHotspotDetail,
   getHotspots,
+  getLastScreen,
   getStrategies,
   getScreenTask,
   navigate,
@@ -44,6 +45,7 @@ const {
     getAlphaSiftStatus: vi.fn(),
     getHotspotDetail: vi.fn(),
     getHotspots: vi.fn(),
+    getLastScreen: vi.fn(async (): Promise<Record<string, unknown>> => ({ available: false })),
     getStrategies: vi.fn(),
     getScreenTask,
     navigate: vi.fn(),
@@ -69,6 +71,7 @@ vi.mock('../../api/alphasift', () => ({
     getStatus: () => getAlphaSiftStatus(),
     getHotspotDetail: (payload: unknown) => getHotspotDetail(payload),
     getHotspots: (payload: unknown) => getHotspots(payload),
+    getLastScreen: () => getLastScreen(),
     getStrategies: () => getStrategies(),
     getScreenTask: (taskId: string) => getScreenTask(taskId),
     screen: (payload: unknown) => screenStocks(payload),
@@ -109,6 +112,8 @@ describe('StockScreeningPage', () => {
     getAlphaSiftStatus.mockReset();
     getHotspotDetail.mockReset();
     getHotspots.mockReset();
+    getLastScreen.mockReset();
+    getLastScreen.mockResolvedValue({ available: false });
     getStrategies.mockReset();
     getScreenTask.mockClear();
     navigate.mockReset();
@@ -143,6 +148,50 @@ describe('StockScreeningPage', () => {
     });
     getHotspots.mockResolvedValue({ enabled: true, provider: 'akshare', hotspots: [], hotspotCount: 0 });
     window.sessionStorage.clear();
+  });
+
+  it('restores the last persisted screening result on mount', async () => {
+    getAlphaSiftStatus.mockResolvedValue({ enabled: true, available: true, installSpecIsDefault: true });
+    getLastScreen.mockResolvedValue({
+      available: true,
+      savedAt: '2026-07-02T18:30:00',
+      strategy: 'dual_low',
+      market: 'cn',
+      maxResults: 3,
+      result: {
+        enabled: true,
+        candidates: [
+          { rank: 1, code: '603986', name: '兆易创新', industry: '半导体', score: 92, raw: {} },
+        ],
+        candidateCount: 1,
+      },
+    });
+
+    render(<StockScreeningPage />);
+
+    expect(await screen.findByText('兆易创新')).toBeInTheDocument();
+    expect(screen.getByText('已恢复上次选股结果')).toBeInTheDocument();
+    expect(screen.getByText('1 条候选')).toBeInTheDocument();
+  });
+
+  it('does not show the restore notice after a fresh screening run completes', async () => {
+    getAlphaSiftStatus.mockResolvedValue({ enabled: true, available: true, installSpecIsDefault: true });
+    screenStocks.mockResolvedValue({
+      enabled: true,
+      candidates: [
+        { rank: 1, code: '600519', name: '贵州茅台', industry: '白酒', score: 85, raw: {} },
+      ],
+      candidateCount: 1,
+    });
+
+    render(<StockScreeningPage />);
+
+    const runButton = await screen.findByRole('button', { name: /运行选股/ });
+    await waitFor(() => expect(runButton).toBeEnabled());
+    fireEvent.click(runButton);
+
+    expect(await screen.findByText('贵州茅台')).toBeInTheDocument();
+    expect(screen.queryByText('已恢复上次选股结果')).not.toBeInTheDocument();
   });
 
   it('re-syncs enabled state when AlphaSift availability check fails after config is enabled', async () => {
