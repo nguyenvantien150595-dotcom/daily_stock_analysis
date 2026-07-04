@@ -187,6 +187,12 @@ def alphasift_start_screen_task(
             market=request.market,
             max_results=request.max_results,
         )
+        try:
+            from src.services.screen_archive_service import archive_screen_result
+
+            archive_screen_result(result, trigger="manual")
+        except Exception as exc:  # noqa: BLE001 - 归档失败不影响选股返回
+            logger.warning("manual screen archive failed: %s", exc)
         task_queue.update_task_progress(
             task_id,
             90,

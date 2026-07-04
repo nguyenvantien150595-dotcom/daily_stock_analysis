@@ -1516,6 +1516,16 @@ def main() -> int:
         else:
             logger.info("配置为不立即运行分析 (RUN_IMMEDIATELY=false)")
 
+        # 选股归档（本地实验功能）：全策略选股入档 + T+1/T+5 回填 + 成绩单推送。
+        # 云端 Actions 磁盘不持久，默认关闭，仅本地 .env 开启。
+        if os.getenv("SCREEN_ARCHIVE_ENABLED", "false").strip().lower() == "true":
+            try:
+                from src.services.screen_archive_service import run_daily_screen_archive
+
+                run_daily_screen_archive(config)
+            except Exception as exc:  # noqa: BLE001 - 实验功能失败不影响主流程
+                logger.warning("选股归档流程失败(不影响主流程): %s", exc)
+
         logger.info("\n程序执行完成")
 
         # 如果启用了服务且是非定时任务模式，保持程序运行
