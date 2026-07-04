@@ -89,6 +89,18 @@ GET {NEWSNOW_BASE_URL}/api/s?id=cls-hot
 
 如果需要更多国内平台，可以继续通过 `POST /sources` 手动添加 NewsNow 源，`source_type=newsnow`，`url` 填 `https://<your-newsnow>/api/s?id=<source_id>`。如果更偏好 RSS，也可以用 RSSHub 等合规 RSS 源继续按 `source_type=rss` 接入。
 
+## 无需 API Key 的 A 股个股资讯
+
+沪深京 A 股分析会默认使用东方财富公开接口补充指定股票的个股新闻和公司公告，不需要配置 Anspire、Tavily 或 SerpAPI 等搜索密钥。
+
+- 分析前按证券代码请求个股新闻和公告，仅保留新闻标题直接命中股票名称或代码的条目，避免把正文偶然提及的基金/行业新闻当成个股新闻；公司公告按证券代码精确查询。
+- 时间范围与 `NEWS_STRATEGY_PROFILE` / `NEWS_MAX_AGE_DAYS` 的有效新闻窗口保持一致，默认为近 3 天。
+- 结果会写入既有 `news_intel` 库，同时进入普通分析和 Agent 的 `news_context`；历史报告的“相关资讯”会合并当次查询与同股票、同时间窗口的缓存条目。
+- 进程内对同一股票、窗口和返回数量缓存 15 分钟，减少免费接口压力。
+- 个股新闻或公告任一接口失败时保留另一路结果；两路都失败时 fail-open，不会阻断行情、技术面和基本面分析。
+
+该能力依赖东方财富公开网络接口，可能受接口改版、限流或网络环境影响；它是无商业搜索 Key 时的精准个股兜底，不等同于完整全网搜索。
+
 ## 后续接入建议
 
 首版基线之上，分析链路会 best-effort 读取本地资讯池：

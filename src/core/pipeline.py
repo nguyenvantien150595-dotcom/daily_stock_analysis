@@ -57,6 +57,7 @@ from src.services.daily_market_context import (
 )
 from src.services.social_sentiment_service import SocialSentimentService
 from src.services.intelligence_service import IntelligenceService
+from src.services.eastmoney_stock_news_service import EastmoneyStockNewsService
 from src.services.analysis_context_builder import (
     AnalysisContextBuilder,
     PipelineAnalysisArtifacts,
@@ -260,6 +261,11 @@ class StockAnalysisPipeline:
             logger.info("搜索服务已启用")
         else:
             logger.warning("搜索服务未启用（未配置搜索能力）")
+
+        # Free A-share fallback: exact stock news and announcements without an API key.
+        self.eastmoney_stock_news_service = EastmoneyStockNewsService(
+            timeout_seconds=getattr(self.config, "news_intel_fetch_timeout_sec", 8.0),
+        )
 
         # 初始化社交舆情服务（仅美股，可选）
         try:
@@ -590,6 +596,20 @@ class StockAnalysisPipeline:
                         logger.warning(f"{stock_name}({code}) 保存新闻情报失败: {e}")
             else:
                 logger.info(f"{stock_name}({code}) 搜索服务不可用，跳过情报搜索")
+
+            free_news_context, free_news_count = self._load_free_a_share_news_context(
+                code=code,
+                stock_name=stock_name,
+                market=market or "cn",
+                query_id=query_id,
+            )
+            if free_news_context:
+                news_context = (
+                    f"{news_context}\n\n{free_news_context}"
+                    if news_context
+                    else free_news_context
+                )
+                news_result_count = (news_result_count or 0) + free_news_count
 
             # Step 4.5: Social sentiment intelligence (US stocks only)
             if self.social_sentiment_service is not None and self.social_sentiment_service.is_available and is_us_stock_code(code):
@@ -1249,6 +1269,20 @@ class StockAnalysisPipeline:
             if trend_result:
                 initial_context["trend_result"] = self._safe_to_dict(trend_result)
 
+            market = get_market_for_stock(normalize_stock_code(code)) or "cn"
+            free_news_context, _free_news_count = self._load_free_a_share_news_context(
+                code=code,
+                stock_name=stock_name,
+                market=market,
+                query_id=query_id,
+            )
+            if free_news_context:
+                initial_context["news_context"] = free_news_context
+                logger.info(
+                    "[%s] Agent mode: free A-share news injected into news_context",
+                    code,
+                )
+
             # Agent path: inject social sentiment as news_context so both
             # executor (_build_user_message) and orchestrator (ctx.set_data)
             # can consume it through the existing news_context channel
@@ -1268,7 +1302,7 @@ class StockAnalysisPipeline:
             persisted_intelligence_context = self._load_persisted_intelligence_context(
                 code=code,
                 stock_name=stock_name,
-                market=get_market_for_stock(normalize_stock_code(code)) or "cn",
+                market=market,
             )
             if persisted_intelligence_context:
                 existing = initial_context.get("news_context")
@@ -2517,6 +2551,59 @@ class StockAnalysisPipeline:
         except Exception as exc:
             logger.debug("读取本地资讯证据失败（fail-open）: %s", exc)
             return None
+
+    def _load_free_a_share_news_context(
+        self,
+        *,
+        code: str,
+        stock_name: str,
+        market: str,
+        query_id: str,
+        limit: int = 8,
+    ) -> Tuple[Optional[str], int]:
+        """Fetch and persist exact A-share news with fail-open semantics."""
+        if (market or "").lower() != "cn":
+            return None, 0
+        try:
+            days = max(1, int(self.config.get_effective_news_window_days() or 1))
+            response = self.eastmoney_stock_news_service.fetch_stock_news(
+                stock_code=code,
+                stock_name=stock_name,
+                days=days,
+                limit=limit,
+            )
+            if not response.results:
+                if response.error_message:
+                    logger.info(
+                        "%s(%s) free A-share news unavailable: %s",
+                        stock_name,
+                        code,
+                        response.error_message,
+                    )
+                return None, 0
+
+            try:
+                self.db.save_news_intel(
+                    code=normalize_stock_code(code),
+                    name=stock_name,
+                    dimension="latest_news",
+                    query=response.query,
+                    response=response,
+                    query_context=self._build_query_context(query_id=query_id),
+                )
+            except Exception as exc:
+                logger.warning("%s(%s) 免费个股资讯入库失败: %s", stock_name, code, exc)
+
+            logger.info(
+                "%s(%s) 免费个股资讯获取完成: %s 条",
+                stock_name,
+                code,
+                len(response.results),
+            )
+            return response.to_context(max_results=limit), len(response.results)
+        except Exception as exc:
+            logger.warning("%s(%s) 免费个股资讯获取失败，继续无新闻分析: %s", stock_name, code, exc)
+            return None, 0
 
     def _build_legacy_analysis_artifacts(
         self,

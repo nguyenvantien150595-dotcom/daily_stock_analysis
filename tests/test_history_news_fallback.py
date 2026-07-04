@@ -10,6 +10,35 @@ from src.services.history_service import HistoryService
 
 
 class HistoryNewsFallbackTestCase(unittest.TestCase):
+    def test_get_news_merges_query_rows_with_same_stock_fallback(self) -> None:
+        direct = SimpleNamespace(
+            title="direct",
+            snippet="direct snippet",
+            url="https://example.com/direct",
+        )
+        fallback = SimpleNamespace(
+            title="cached",
+            snippet="cached snippet",
+            url="https://example.com/cached",
+        )
+        duplicate = SimpleNamespace(
+            title="duplicate",
+            snippet="duplicate snippet",
+            url="https://example.com/direct",
+        )
+        mock_db = MagicMock()
+        mock_db.get_news_intel_by_query_id.return_value = [direct]
+        svc = HistoryService(db_manager=mock_db)
+
+        with patch.object(
+            svc,
+            "_fallback_news_by_analysis_context",
+            return_value=[duplicate, fallback],
+        ):
+            result = svc.get_news_intel("q-1", limit=20)
+
+        self.assertEqual([item["title"] for item in result], ["direct", "cached"])
+
     def test_fallback_filters_by_published_date_window(self) -> None:
         now = datetime.now()
         analysis = SimpleNamespace(code="600519", created_at=now)

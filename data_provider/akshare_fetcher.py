@@ -1608,11 +1608,11 @@ class AkshareFetcher(BaseFetcher):
             # 防封禁策略
             self._set_random_user_agent()
             self._enforce_rate_limit()
-            
+
             logger.info(f"[API调用] ak.stock_cyq_em(symbol={stock_code}) 获取筹码分布...")
             import time as _time
             api_start = _time.time()
-            
+
             df = ak.stock_cyq_em(symbol=stock_code)
             
             api_elapsed = _time.time() - api_start
